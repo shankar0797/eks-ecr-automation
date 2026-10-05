@@ -1,38 +1,38 @@
-# EKS ECR Automation with Prometheus & Grafana
-
-## Project Overview
+# EKS ECR Automation
 
 This project demonstrates an end-to-end Kubernetes deployment workflow using a jump server to build a Docker application, push the image to Amazon ECR, deploy it to Amazon EKS, and monitor the application using Prometheus and Grafana.
 
 The deployment process is automated using a Bash script.
 
+---
+
 ## Architecture
 
 ```text
 Developer
-    |
-    v
+   |
+   v
 Jump Server / EC2
-    |
-    | deploy.sh
-    |
-    +----> Docker Build
-    |          |
-    |          v
-    |       Amazon ECR
-    |          |
-    |          v
-    +----> Amazon EKS
-               |
-               v
-        Kubernetes Service
-               |
-               v
-        Flask Application
-          |           |
-          |           +----> /health
-          |
-          +----> /metrics
+   |
+   | deploy.sh
+   |
+   +----> Docker Build
+             |
+             v
+        Amazon ECR
+             |
+             v
+        Amazon EKS
+             |
+             v
+    Kubernetes Service
+             |
+             v
+      Flask Application
+         |        |
+         |        +----> /health
+         |
+         +----> /metrics
                     |
                     v
               ServiceMonitor
@@ -55,50 +55,93 @@ Helm
 Prometheus
 Grafana
 ServiceMonitor
-kubectl
-AWS CLI
 Project Structure
 eks-ecr-automation/
 │
-├── .dockerignore
-├── .gitignore
-├── Dockerfile
 ├── app.py
 ├── requirements.txt
+├── Dockerfile
 │
 ├── k8s/
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   └── servicemonitor.yaml
 │
-└── scripts/
-    └── deploy.sh
-Application
+├── scripts/
+│   └── deploy.sh
+│
+├── .dockerignore
+├── .gitignore
+└── README.md
+Application Endpoints
+Endpoint	Purpose
+/	Application information
+/health	Health check
+/metrics	Prometheus metrics
+Deployment Flow
 
-The application is a simple Flask API.
+The deployment is automated using scripts/deploy.sh.
 
-Endpoints
-GET /
-GET /health
-GET /metrics
+1. Check required tools
+        |
+        v
+2. Verify AWS identity
+        |
+        v
+3. Login to Amazon ECR
+        |
+        v
+4. Build Docker image
+        |
+        v
+5. Tag Docker image
+        |
+        v
+6. Push image to ECR
+        |
+        v
+7. Verify image in ECR
+        |
+        v
+8. Update EKS kubeconfig
+        |
+        v
+9. Apply Kubernetes manifests
+        |
+        v
+10. Update Deployment image
+        |
+        v
+11. Wait for rollout
+        |
+        v
+12. Verify deployment
+Monitoring
 
-Example:
+Prometheus collects application metrics exposed through /metrics.
 
-{
-  "message": "EKS ECR Automation Demo",
-  "version": "docker"
-}
+Flask Application
+       |
+       | /metrics
+       v
+Kubernetes Service
+       |
+       v
+ServiceMonitor
+       |
+       v
+Prometheus
+       |
+       v
+Grafana
 
-The /metrics endpoint exposes Prometheus metrics.
+The Grafana dashboard provides:
 
-Application metrics include:
-
-http_requests_total
-http_request_duration_seconds
-Docker
-
-Build the application image:
-
+Request rate
+Total requests
+HTTP status codes
+Request latency
+Docker Build
 docker build -t eks-demo-app:1.0 .
 
 Run locally:
@@ -115,7 +158,7 @@ curl http://localhost:8000/health
 curl http://localhost:8000/metrics
 Amazon ECR
 
-Authenticate Docker with ECR:
+Login to ECR:
 
 aws ecr get-login-password --region ap-south-1 | \
 docker login \
@@ -135,161 +178,74 @@ docker push \
   <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/eks-demo-app:1.0
 Amazon EKS Deployment
 
-The Kubernetes deployment uses the image stored in ECR.
+Update kubeconfig:
 
-Apply the manifests:
+aws eks update-kubeconfig \
+  --region ap-south-1 \
+  --name eks-lab
+
+Apply Kubernetes resources:
 
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/servicemonitor.yaml
 
-Verify:
+Check the deployment:
 
 kubectl get deployment
 kubectl get pods
 kubectl get svc
 
-Check the application:
+Check rollout:
 
-kubectl get pods -l app=eks-demo-app
-Deployment Automation
+kubectl rollout status deployment/eks-demo-app
+Automated Deployment
 
-The complete build and deployment process is automated using:
-
-scripts/deploy.sh
-
-The script performs:
-
-Validate required tools
-Check AWS identity
-Authenticate with ECR
-Build Docker image
-Tag image
-Push image to ECR
-Verify image exists in ECR
-Update EKS kubeconfig
-Apply Kubernetes manifests
-Update Deployment image
-Wait for rollout
-Display deployment status
-
-Run:
+The complete deployment can be executed using:
 
 ./scripts/deploy.sh
 
-The script generates a timestamp-based image version, for example:
+The script performs:
 
-eks-demo-app:20261005162458
-Monitoring
-
-Prometheus and Grafana were deployed using:
-
-kube-prometheus-stack
-
-The application exposes:
-
-/metrics
-
-A Kubernetes ServiceMonitor discovers the application Service and instructs Prometheus to scrape the metrics endpoint.
-
-Monitoring flow:
-
-Flask
-  |
-  | /metrics
-  v
-Kubernetes Service
-  |
-  v
-ServiceMonitor
-  |
-  v
-Prometheus
-  |
-  v
-Grafana
-Grafana Dashboard
-
-The Grafana dashboard contains application-level metrics including:
-
-Request Rate
-sum(rate(http_requests_total[1m]))
-
-Shows the application request rate.
-
-Total Requests
-sum(http_requests_total)
-
-Shows the cumulative number of HTTP requests.
-
-HTTP Status Codes
-sum by (status) (http_requests_total)
-
-Shows requests grouped by HTTP status code.
-
-Request Latency
-sum(rate(http_request_duration_seconds_sum[1m]))
-/
-sum(rate(http_request_duration_seconds_count[1m]))
-
-Shows average request latency.
-
+AWS identity verification
+ECR authentication
+Docker image build
+Image tagging
+ECR push
+ECR image verification
+EKS kubeconfig update
+Kubernetes manifest deployment
+Deployment image update
+Rollout verification
 Troubleshooting Scenarios
 Docker Port Conflict
 
-Problem:
-
-Bind for 0.0.0.0:8000 failed
-
-Cause:
-
-Another process/container was already using port 8000.
+Problem: Port 8000 was already being used.
 
 Resolution:
 
-docker ps
-docker stop <container>
-
-or stop the local Flask process.
-
-EKS ImagePullBackOff
-
-Problem:
-
-New EKS pod entered:
+Identify the process/container using the port and stop it before starting the new container.
 
 ImagePullBackOff
 
-Root cause:
+Problem: Kubernetes attempted to pull a timestamp-based image tag that did not exist in ECR.
 
-The Deployment referenced a timestamp image tag that had not been pushed to ECR.
+Root Cause:
 
-Example:
-
-ECR:
-eks-demo-app:1.0
-
-EKS:
-eks-demo-app:20261005162458
+ECR Image      → :1.0
+EKS Deployment → :20261005214530
 
 Resolution:
 
-Ensure the exact image tag is successfully pushed to ECR before updating the Deployment.
+Push the required image tag to ECR and verify the image before updating the Kubernetes Deployment.
 
-Kubernetes Service Has No Endpoints
+Service Has No Endpoints
 
-Problem:
+Problem: Service could not reach the application Pods.
 
-Service was not routing traffic to Pods.
+Root Cause:
 
-Root cause:
-
-Service selector did not match the Pod labels.
-
-Verify:
-
-kubectl get endpointslice
-kubectl describe service eks-demo-app
-kubectl get pods --show-labels
+The Service selector did not match the Pod labels.
 
 Resolution:
 
@@ -298,105 +254,85 @@ Ensure:
 selector:
   app: eks-demo-app
 
-matches the Pod label.
+matches:
 
-Prometheus Metrics Not Found
+labels:
+  app: eks-demo-app
+Grafana Plugin Error
 
-Problem:
+Problem: Grafana showed:
 
-/metrics returned 404.
+Plugin not registered
 
-Root cause:
+Root Cause:
 
-EKS was still running the older application image without Prometheus instrumentation.
-
-Resolution:
-
-Build, push and deploy the observability-enabled image.
-
-Grafana Prometheus Plugin Error
-
-Problem:
-
-Grafana reported:
-
-plugin not registered
-
-Root cause:
-
-The Prometheus plugin update attempted to modify a read-only bundled plugin filesystem.
+The Prometheus plugin update failed because the plugin filesystem was read-only.
 
 Resolution:
 
-Restart Grafana and verify the plugin registration.
+Restart the Grafana Deployment and verify the datasource again.
 
-kubectl rollout restart deployment/kube-prometheus-stack-grafana \
-  -n monitoring
 Key Learnings
-Docker image lifecycle
-Amazon ECR image management
+Docker image build and tagging
+Amazon ECR authentication and image management
 Kubernetes Deployments
 Kubernetes Services
 EKS networking
-ECR to EKS image flow
+Kubernetes readiness probes
+ECR → EKS image deployment
 Bash deployment automation
-Kubernetes rollout management
-Prometheus application instrumentation
-ServiceMonitor discovery
-Prometheus queries
+Prometheus metrics
+ServiceMonitor
 Grafana dashboards
 Kubernetes troubleshooting
-Real-world deployment failure handling
+Production-style deployment workflow
 Future Improvements
-
-Possible future enhancements:
-
 Jenkins CI/CD pipeline
 GitHub Actions
-Helm-based application deployment
-Container image security scanning
+Helm-based deployment
+Container security scanning
+Image vulnerability scanning
 Prometheus alerting
-Alertmanager
 Centralized logging
 Distributed tracing
-AWS CloudWatch integration
-P95/P99 latency dashboards
-Deployment version injection
-Secrets management# EKS ECR Automation with Prometheus & Grafana
-
-## Project Overview
+CloudWatch integration
+P95/P99 latency monitoring
+Dynamic application version injection
+Secrets management# EKS ECR Automation
 
 This project demonstrates an end-to-end Kubernetes deployment workflow using a jump server to build a Docker application, push the image to Amazon ECR, deploy it to Amazon EKS, and monitor the application using Prometheus and Grafana.
 
 The deployment process is automated using a Bash script.
 
+---
+
 ## Architecture
 
 ```text
 Developer
-    |
-    v
+   |
+   v
 Jump Server / EC2
-    |
-    | deploy.sh
-    |
-    +----> Docker Build
-    |          |
-    |          v
-    |       Amazon ECR
-    |          |
-    |          v
-    +----> Amazon EKS
-               |
-               v
-        Kubernetes Service
-               |
-               v
-        Flask Application
-          |           |
-          |           +----> /health
-          |
-          +----> /metrics
+   |
+   | deploy.sh
+   |
+   +----> Docker Build
+             |
+             v
+        Amazon ECR
+             |
+             v
+        Amazon EKS
+             |
+             v
+    Kubernetes Service
+             |
+             v
+      Flask Application
+         |        |
+         |        +----> /health
+         |
+         +----> /metrics
                     |
                     v
               ServiceMonitor
@@ -419,50 +355,93 @@ Helm
 Prometheus
 Grafana
 ServiceMonitor
-kubectl
-AWS CLI
 Project Structure
 eks-ecr-automation/
 │
-├── .dockerignore
-├── .gitignore
-├── Dockerfile
 ├── app.py
 ├── requirements.txt
+├── Dockerfile
 │
 ├── k8s/
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   └── servicemonitor.yaml
 │
-└── scripts/
-    └── deploy.sh
-Application
+├── scripts/
+│   └── deploy.sh
+│
+├── .dockerignore
+├── .gitignore
+└── README.md
+Application Endpoints
+Endpoint	Purpose
+/	Application information
+/health	Health check
+/metrics	Prometheus metrics
+Deployment Flow
 
-The application is a simple Flask API.
+The deployment is automated using scripts/deploy.sh.
 
-Endpoints
-GET /
-GET /health
-GET /metrics
+1. Check required tools
+        |
+        v
+2. Verify AWS identity
+        |
+        v
+3. Login to Amazon ECR
+        |
+        v
+4. Build Docker image
+        |
+        v
+5. Tag Docker image
+        |
+        v
+6. Push image to ECR
+        |
+        v
+7. Verify image in ECR
+        |
+        v
+8. Update EKS kubeconfig
+        |
+        v
+9. Apply Kubernetes manifests
+        |
+        v
+10. Update Deployment image
+        |
+        v
+11. Wait for rollout
+        |
+        v
+12. Verify deployment
+Monitoring
 
-Example:
+Prometheus collects application metrics exposed through /metrics.
 
-{
-  "message": "EKS ECR Automation Demo",
-  "version": "docker"
-}
+Flask Application
+       |
+       | /metrics
+       v
+Kubernetes Service
+       |
+       v
+ServiceMonitor
+       |
+       v
+Prometheus
+       |
+       v
+Grafana
 
-The /metrics endpoint exposes Prometheus metrics.
+The Grafana dashboard provides:
 
-Application metrics include:
-
-http_requests_total
-http_request_duration_seconds
-Docker
-
-Build the application image:
-
+Request rate
+Total requests
+HTTP status codes
+Request latency
+Docker Build
 docker build -t eks-demo-app:1.0 .
 
 Run locally:
@@ -479,7 +458,7 @@ curl http://localhost:8000/health
 curl http://localhost:8000/metrics
 Amazon ECR
 
-Authenticate Docker with ECR:
+Login to ECR:
 
 aws ecr get-login-password --region ap-south-1 | \
 docker login \
@@ -499,161 +478,74 @@ docker push \
   <ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/eks-demo-app:1.0
 Amazon EKS Deployment
 
-The Kubernetes deployment uses the image stored in ECR.
+Update kubeconfig:
 
-Apply the manifests:
+aws eks update-kubeconfig \
+  --region ap-south-1 \
+  --name eks-lab
+
+Apply Kubernetes resources:
 
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
+kubectl apply -f k8s/servicemonitor.yaml
 
-Verify:
+Check the deployment:
 
 kubectl get deployment
 kubectl get pods
 kubectl get svc
 
-Check the application:
+Check rollout:
 
-kubectl get pods -l app=eks-demo-app
-Deployment Automation
+kubectl rollout status deployment/eks-demo-app
+Automated Deployment
 
-The complete build and deployment process is automated using:
-
-scripts/deploy.sh
-
-The script performs:
-
-Validate required tools
-Check AWS identity
-Authenticate with ECR
-Build Docker image
-Tag image
-Push image to ECR
-Verify image exists in ECR
-Update EKS kubeconfig
-Apply Kubernetes manifests
-Update Deployment image
-Wait for rollout
-Display deployment status
-
-Run:
+The complete deployment can be executed using:
 
 ./scripts/deploy.sh
 
-The script generates a timestamp-based image version, for example:
+The script performs:
 
-eks-demo-app:20261005162458
-Monitoring
-
-Prometheus and Grafana were deployed using:
-
-kube-prometheus-stack
-
-The application exposes:
-
-/metrics
-
-A Kubernetes ServiceMonitor discovers the application Service and instructs Prometheus to scrape the metrics endpoint.
-
-Monitoring flow:
-
-Flask
-  |
-  | /metrics
-  v
-Kubernetes Service
-  |
-  v
-ServiceMonitor
-  |
-  v
-Prometheus
-  |
-  v
-Grafana
-Grafana Dashboard
-
-The Grafana dashboard contains application-level metrics including:
-
-Request Rate
-sum(rate(http_requests_total[1m]))
-
-Shows the application request rate.
-
-Total Requests
-sum(http_requests_total)
-
-Shows the cumulative number of HTTP requests.
-
-HTTP Status Codes
-sum by (status) (http_requests_total)
-
-Shows requests grouped by HTTP status code.
-
-Request Latency
-sum(rate(http_request_duration_seconds_sum[1m]))
-/
-sum(rate(http_request_duration_seconds_count[1m]))
-
-Shows average request latency.
-
+AWS identity verification
+ECR authentication
+Docker image build
+Image tagging
+ECR push
+ECR image verification
+EKS kubeconfig update
+Kubernetes manifest deployment
+Deployment image update
+Rollout verification
 Troubleshooting Scenarios
 Docker Port Conflict
 
-Problem:
-
-Bind for 0.0.0.0:8000 failed
-
-Cause:
-
-Another process/container was already using port 8000.
+Problem: Port 8000 was already being used.
 
 Resolution:
 
-docker ps
-docker stop <container>
-
-or stop the local Flask process.
-
-EKS ImagePullBackOff
-
-Problem:
-
-New EKS pod entered:
+Identify the process/container using the port and stop it before starting the new container.
 
 ImagePullBackOff
 
-Root cause:
+Problem: Kubernetes attempted to pull a timestamp-based image tag that did not exist in ECR.
 
-The Deployment referenced a timestamp image tag that had not been pushed to ECR.
+Root Cause:
 
-Example:
-
-ECR:
-eks-demo-app:1.0
-
-EKS:
-eks-demo-app:20261005162458
+ECR Image      → :1.0
+EKS Deployment → :20261005214530
 
 Resolution:
 
-Ensure the exact image tag is successfully pushed to ECR before updating the Deployment.
+Push the required image tag to ECR and verify the image before updating the Kubernetes Deployment.
 
-Kubernetes Service Has No Endpoints
+Service Has No Endpoints
 
-Problem:
+Problem: Service could not reach the application Pods.
 
-Service was not routing traffic to Pods.
+Root Cause:
 
-Root cause:
-
-Service selector did not match the Pod labels.
-
-Verify:
-
-kubectl get endpointslice
-kubectl describe service eks-demo-app
-kubectl get pods --show-labels
+The Service selector did not match the Pod labels.
 
 Resolution:
 
@@ -662,68 +554,48 @@ Ensure:
 selector:
   app: eks-demo-app
 
-matches the Pod label.
+matches:
 
-Prometheus Metrics Not Found
+labels:
+  app: eks-demo-app
+Grafana Plugin Error
 
-Problem:
+Problem: Grafana showed:
 
-/metrics returned 404.
+Plugin not registered
 
-Root cause:
+Root Cause:
 
-EKS was still running the older application image without Prometheus instrumentation.
-
-Resolution:
-
-Build, push and deploy the observability-enabled image.
-
-Grafana Prometheus Plugin Error
-
-Problem:
-
-Grafana reported:
-
-plugin not registered
-
-Root cause:
-
-The Prometheus plugin update attempted to modify a read-only bundled plugin filesystem.
+The Prometheus plugin update failed because the plugin filesystem was read-only.
 
 Resolution:
 
-Restart Grafana and verify the plugin registration.
+Restart the Grafana Deployment and verify the datasource again.
 
-kubectl rollout restart deployment/kube-prometheus-stack-grafana \
-  -n monitoring
 Key Learnings
-Docker image lifecycle
-Amazon ECR image management
+Docker image build and tagging
+Amazon ECR authentication and image management
 Kubernetes Deployments
 Kubernetes Services
 EKS networking
-ECR to EKS image flow
+Kubernetes readiness probes
+ECR → EKS image deployment
 Bash deployment automation
-Kubernetes rollout management
-Prometheus application instrumentation
-ServiceMonitor discovery
-Prometheus queries
+Prometheus metrics
+ServiceMonitor
 Grafana dashboards
 Kubernetes troubleshooting
-Real-world deployment failure handling
+Production-style deployment workflow
 Future Improvements
-
-Possible future enhancements:
-
 Jenkins CI/CD pipeline
 GitHub Actions
-Helm-based application deployment
-Container image security scanning
+Helm-based deployment
+Container security scanning
+Image vulnerability scanning
 Prometheus alerting
-Alertmanager
 Centralized logging
 Distributed tracing
-AWS CloudWatch integration
-P95/P99 latency dashboards
-Deployment version injection
+CloudWatch integration
+P95/P99 latency monitoring
+Dynamic application version injection
 Secrets management
