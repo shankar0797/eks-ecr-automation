@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+
+metadata:
+  name: eks-demo-app
+  namespace: monitoring
+
+  labels:
+    release: kube-prometheus-stack
+
+spec:
+  namespaceSelector:
+    matchNames:
+      - default
+
+  selector:
+    matchLabels:
+      app: eks-demo-app
+
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
